@@ -39,10 +39,17 @@ export interface IActions {
   inc: (path: TemplateStringsArray, ...args: any[]) => void;
   dec: (path: TemplateStringsArray, ...args: any[]) => void;
 }
+interface Ipipe extends IActions {
+  run: () => State;
+}
+
+export interface IActionsAndPipe extends IActions {
+  pipe: Ipipe;
+}
 
 type StoreMutator = (path: string[]) => any;
 
-type TSetStateWrapper = (type: string, result: State, path: string[]) => void;
+type TMutateState = (type: string, path: string[], result: State) => any;
 
 const defaultMiddlewares =
   process.env.NODE_ENV === "development" &&
@@ -52,7 +59,7 @@ const defaultMiddlewares =
     ? [devtoolsCreator]
     : [];
 
-interface ICreatedFuncs extends IActions {
+interface ICreatedFuncs extends IActionsAndPipe {
   Provider: React.ComponentType<any>;
   connect: Connect;
 }
@@ -84,7 +91,12 @@ export const createStore = (
 
   let state = initialState;
 
-  const setStateWrapper: TSetStateWrapper = (type, result, path) => {
+  const setStateWrapper: TMutateState = (type, path, result) => {
+    if (!providerValue) {
+      console.error("<Provider /> is not initialized yet");
+      return;
+    }
+
     state = { ...state, ...result };
     const newState = { ...state, ...result };
 
@@ -102,59 +114,91 @@ export const createStore = (
       mutator(getPathFromTemplateString(templateData, ...args));
   }
 
-  const wrappAction = (type: string, path: string[], result: State) => {
-    if (!providerValue) {
-      console.error("<Provider /> is not initialized yet");
-      return;
-    }
+  const resolverConstruct = (stateMutator: TMutateState): TMutateState => (
+    type,
+    path,
+    result
+  ) => {
     return result.then
-      ? result.then((result: any) => setStateWrapper(type, result, path))
-      : setStateWrapper(type, result, path);
+      ? result.then((result: any) => stateMutator(type, path, result))
+      : stateMutator(type, path, result);
   };
 
-  function actionResult(actionName: Actions): any {
-    switch (actionName) {
-      case "nullify":
-        return (path: string[]) =>
-          wrappAction("nullify", path, PF.setTo(path, null, state));
-      case "concat":
-        return (path: string[]) => (list: any[]) =>
-          wrappAction(
-            "concat",
-            path,
-            PF.overTo(path, PF.flip(PF.concat)(list), state)
-          );
-      case "extend":
-        return (path: string[]) => (object: object) =>
-          wrappAction("extend", path, PF.overTo(path, PF.merge(object), state));
-      case "toggle":
-        return (path: string[]) =>
-          wrappAction("toggle", path, PF.overTo(path, PF.not, state));
-      case "set":
-        return (path: string[]) => (value: any) =>
-          wrappAction("set", path, PF.setTo(path, value, state));
-      case "inc":
-        return (path: string[]) =>
-          wrappAction("inc", path, PF.overTo(path, PF.inc, state));
-      case "dec":
-        return (path: string[]) =>
-          wrappAction("dec", path, PF.overTo(path, PF.dec, state));
+  const defaultStateMutator: TMutateState = resolverConstruct(setStateWrapper);
+  const pipeStateMutator: TMutateState = resolverConstruct(pipeSetStateWrapper);
+
+  const mutators = {
+    nullify: (callback: TMutateState) =>
+      toPath((path: string[]) =>
+        callback("nullify", path, PF.setTo(path, null, state))
+      ),
+    concat: (callback: TMutateState) =>
+      toPath((path: string[]) => (list: any[]) =>
+        callback(
+          "nullify",
+          path,
+          PF.overTo(path, PF.flip(PF.concat)(list), state)
+        )
+      ),
+    extend: (callback: TMutateState) =>
+      toPath((path: string[]) => (object: object) =>
+        callback("nullify", path, PF.overTo(path, PF.merge(object), state))
+      ),
+    toggle: (callback: TMutateState) =>
+      toPath((path: string[]) =>
+        callback("nullify", path, PF.overTo(path, PF.not, state))
+      ),
+    set: (callback: TMutateState) =>
+      toPath((path: string[]) => (value: any) =>
+        callback("nullify", path, PF.setTo(path, value, state))
+      ),
+    inc: (callback: TMutateState) =>
+      toPath((path: string[]) =>
+        callback("nullify", path, PF.overTo(path, PF.inc, state))
+      ),
+    dec: (callback: TMutateState) =>
+      toPath((path: string[]) =>
+        callback("nullify", path, PF.overTo(path, PF.dec, state))
+      )
+  };
+
+  interface PipeListItem {
+    type: string;
+    path: string[];
+    result: State;
+  }
+  let pipeList: PipeListItem[] = [];
+
+  const actions: IActionsAndPipe = {
+    nullify: mutators.nullify(defaultStateMutator),
+    concat: mutators.concat(defaultStateMutator),
+    extend: mutators.extend(defaultStateMutator),
+    toggle: mutators.toggle(defaultStateMutator),
+    set: mutators.set(defaultStateMutator),
+    inc: mutators.inc(defaultStateMutator),
+    dec: mutators.dec(defaultStateMutator),
+    pipe: {
+      nullify: mutators.nullify(piper),
+      concat: mutators.concat(piper),
+      extend: mutators.extend(piper),
+      toggle: mutators.toggle(piper),
+      set: mutators.set(piper),
+      inc: mutators.inc(piper),
+      dec: mutators.dec(piper),
+      run: () => {
+        pipeList.forEach((item: PipeListItem) => {
+          pipeStateMutator(item.type, item.path, item.result);
+        });
+        pipeList = [];
+        return {};
+      }
     }
-  }
-
-  function action(actionName: Actions) {
-    return toPath(actionResult(actionName));
-  }
-
-  const actions: IActions = {
-    nullify: action("nullify"),
-    concat: action("concat"),
-    extend: action("extend"),
-    toggle: action("toggle"),
-    set: action("set"),
-    inc: action("inc"),
-    dec: action("dec")
   };
+
+  function piper(type: string, path: string[], result: State) {
+    pipeList.push({ type, path, result });
+    return actions.pipe;
+  }
 
   const Provider = createProvider(setProvider, context.Provider, initialState);
   const connect = createConnect(context.Consumer);
