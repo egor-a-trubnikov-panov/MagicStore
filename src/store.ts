@@ -5,4 +5,4 @@ const store = createStore({
   other: 5
 });
 
-export const { Provider, connect, set, inc, nullify } = store;
+export const { Provider, connect, set, inc, nullify, pipe } = store;

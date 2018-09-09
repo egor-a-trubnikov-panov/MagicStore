@@ -109,6 +109,19 @@ export const createStore = (
     return state;
   };
 
+  const pipeSetStateWrapper: TMutateState = (type, path, result) => {
+    if (!providerValue) {
+      console.error("<Provider /> is not initialized yet");
+      return;
+    }
+
+    state = { ...state, ...result };
+    const newState = { ...state, ...result };
+
+    const runMidleware = (middleware: any) =>
+      middleware(type, { result, path }, newState);
+  };
+
   function toPath(mutator: StoreMutator) {
     return (templateData: TemplateStringsArray, ...args: any[]) =>
       mutator(getPathFromTemplateString(templateData, ...args));
@@ -189,8 +202,12 @@ export const createStore = (
         pipeList.forEach((item: PipeListItem) => {
           pipeStateMutator(item.type, item.path, item.result);
         });
+
+        providerValue.setState(state, () => {
+          providerValue.initializedMiddlewares.forEach(runMidleware);
+        });
         pipeList = [];
-        return {};
+        return state;
       }
     }
   };
