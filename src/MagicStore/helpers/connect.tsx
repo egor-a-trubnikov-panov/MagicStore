@@ -1,23 +1,23 @@
-import * as React from "react";
-import { Prevent } from "../Components/Prevent";
-import { State } from "../index";
-import { sel, ISellector } from "./sellector";
+import * as React from 'react';
+import { Prevent } from '../Components/Prevent';
+import { IState } from '../index';
+import { sel, ISellector } from './sellector';
 
 type MapStateToProps = (
-  sellector: (state: State) => ISellector,
-  state: State
-) => State;
+  sellector: (state: IState) => ISellector,
+  state: IState
+) => IState;
 
 export type Connect = (
   mapStateToProps: MapStateToProps,
   actionMap?: { [key: string]: (props: any) => any }
 ) => (WrappedComponent: React.ComponentType<{}>) => React.ComponentType<{}>;
 
-type Consumer = React.ComponentType<{
-  children: (state: State | void) => React.ReactNode;
+type TConsumer = React.ComponentType<{
+  children: (state: IState | void) => React.ReactNode;
 }>;
 
-export type CreateConnect = (consumer: Consumer) => Connect;
+export type CreateConnect = (consumer: TConsumer) => Connect;
 
 export const createConnect: CreateConnect = Consumer => (
   mapStateToProps: MapStateToProps,
@@ -26,10 +26,10 @@ export const createConnect: CreateConnect = Consumer => (
   const renderComponent: React.SFC = props => <WrappedComponent {...props} />;
   const ConnectedComponent: React.SFC = props => (
     <Consumer>
-      {(state: State = {}) => {
+      {(state: IState = {}) => {
         const filteredState = {
           ...mapStateToProps(sel(state), state),
-          ...actionMap
+          ...actionMap,
         };
         return (
           <Prevent
@@ -44,7 +44,7 @@ export const createConnect: CreateConnect = Consumer => (
 
   ConnectedComponent.displayName = `Connect(${WrappedComponent.displayName ||
     WrappedComponent.name ||
-    "Unknown"})`;
+    'Unknown'})`;
 
   return ConnectedComponent;
 };

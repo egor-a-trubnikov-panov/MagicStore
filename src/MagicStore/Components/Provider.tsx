@@ -1,12 +1,15 @@
-import * as React from "react";
-import { State } from "../index";
+import * as React from 'react';
+import { IState } from '../index';
 
-type Props = { children: React.ReactNode; initialState: {} };
+interface IProps {
+  children: React.ReactNode;
+  initialState: {};
+}
 
 type CreateProvider = (
   setProvider: (prop: any) => any,
   Provider: React.ComponentType<any>,
-  initialState: State
+  initialState: IState
 ) => React.ComponentType<any>;
 
 export const createProvider: CreateProvider = (
@@ -14,14 +17,14 @@ export const createProvider: CreateProvider = (
   Provider,
   initialState
 ) =>
-  class EnhancedProvider extends React.PureComponent<Props, State> {
-    constructor(props: Props) {
+  class EnhancedProvider extends React.PureComponent<IProps, IState> {
+    constructor(props: IProps) {
       super(props);
       this.state = props.initialState || initialState;
       setProvider(this);
     }
 
-    render() {
+    public render() {
       return <Provider value={this.state}>{this.props.children}</Provider>;
     }
   };

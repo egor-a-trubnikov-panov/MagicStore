@@ -1,12 +1,14 @@
-import * as React from "react";
+import * as React from 'react';
 
-import { createProvider } from "./Components/Provider";
-import { Connect, createConnect } from "./helpers/connect";
-import { devtoolsCreator } from "./helpers/devtools";
-import { getPathFromTemplateString } from "./helpers/templateStringParser";
-import { PF } from "../pureFunctions";
+import { createProvider } from './Components/Provider';
+import { Connect, createConnect } from './helpers/connect';
+import { devtoolsCreator } from './helpers/devtools';
+import { getPathFromTemplateString } from './helpers/templateStringParser';
+import { set, over, lensPath, flip, concat, merge, not, inc, dec } from 'ramda';
 
-export type State = { [key: string]: any };
+export interface IState {
+  [key: string]: any;
+}
 
 type TSetState = (
   state: (prevState: any, props: any) => any,
@@ -19,28 +21,48 @@ interface IProviderValue {
 }
 
 export type Actions =
-  | "nullify"
-  | "concat"
-  | "extend"
-  | "toggle"
-  | "set"
-  | "inc"
-  | "dec";
+  | 'nullify'
+  | 'concat'
+  | 'extend'
+  | 'toggle'
+  | 'set'
+  | 'inc'
+  | 'dec';
 
 export interface IActions {
-  nullify: (path: TemplateStringsArray, ...args: any[]) => void;
-  concat: (path: TemplateStringsArray, ...args: any[]) => (list: any[]) => void;
+  nullify: (path: TemplateStringsArray, ...args: any[]) => IState;
+  concat: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => (list: any[]) => IState;
   extend: (
     path: TemplateStringsArray,
     ...args: any[]
-  ) => (object: object) => void;
-  toggle: (path: TemplateStringsArray, ...args: any[]) => void;
-  set: (path: TemplateStringsArray, ...args: any[]) => (value: any) => void;
-  inc: (path: TemplateStringsArray, ...args: any[]) => void;
-  dec: (path: TemplateStringsArray, ...args: any[]) => void;
+  ) => (object: object) => IState;
+  toggle: (path: TemplateStringsArray, ...args: any[]) => IState;
+  set: (path: TemplateStringsArray, ...args: any[]) => (value: any) => IState;
+  inc: (path: TemplateStringsArray, ...args: any[]) => IState;
+  dec: (path: TemplateStringsArray, ...args: any[]) => IState;
 }
-interface Ipipe extends IActions {
-  run: () => State;
+
+export interface IPipeActions {
+  nullify: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
+  concat: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => (list: any[]) => Ipipe;
+  extend: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => (object: object) => Ipipe;
+  toggle: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
+  set: (path: TemplateStringsArray, ...args: any[]) => (value: any) => Ipipe;
+  inc: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
+  dec: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
+}
+
+interface Ipipe extends IPipeActions {
+  run: () => IState;
 }
 
 export interface IActionsAndPipe extends IActions {
@@ -49,11 +71,11 @@ export interface IActionsAndPipe extends IActions {
 
 type StoreMutator = (path: string[]) => any;
 
-type TMutateState = (type: string, path: string[], result: State) => any;
+type TMutateState = (type: string, path: string[], result: IState) => any;
 
 const defaultMiddlewares =
-  process.env.NODE_ENV === "development" &&
-  typeof window !== "undefined" &&
+  process.env.NODE_ENV === 'development' &&
+  typeof window !== 'undefined' &&
   // @ts-ignore
   window.devToolsExtension
     ? [devtoolsCreator]
@@ -80,12 +102,12 @@ export const createStore = (
 
     const initializedMiddlewares = midlewaresList.map(setMidleware);
 
-    const setState: TSetState = (state, callback) =>
-      self.setState(state, callback);
+    const setState: TSetState = (newState, callback) =>
+      self.setState(newState, callback);
 
     providerValue = {
       setState,
-      initializedMiddlewares
+      initializedMiddlewares,
     };
   };
 
@@ -93,7 +115,7 @@ export const createStore = (
 
   const setStateWrapper: TMutateState = (type, path, result) => {
     if (!providerValue) {
-      console.error("<Provider /> is not initialized yet");
+      console.error('<Provider /> is not initialized yet');
       return state;
     }
 
@@ -109,9 +131,14 @@ export const createStore = (
     return state;
   };
 
-  const pipeSetStateWrapper = (type, path, result, accumulator) => {
+  const pipeSetStateWrapper = (
+    type: string,
+    path: string[],
+    result: IState,
+    accumulator: IState
+  ): IState => {
     if (!providerValue) {
-      console.error("<Provider /> is not initialized yet");
+      console.error('<Provider /> is not initialized yet');
       return state;
     }
 
@@ -130,60 +157,63 @@ export const createStore = (
       mutator(getPathFromTemplateString(templateData, ...args));
   }
 
-  const resolverConstruct = (stateMutator: TMutateState): TMutateState => (
-    type,
-    path,
-    result
+  const resolverConstruct = (stateMutator: any) => (
+    type: string,
+    path: string[],
+    result: IState,
+    accumulator?: IState
   ) => {
     return result.then
-      ? result.then((result: any) => stateMutator(type, path, result))
-      : stateMutator(type, path, result);
+      ? result.then((resolvedResult: any) =>
+          stateMutator(type, path, resolvedResult, accumulator)
+        )
+      : stateMutator(type, path, result, accumulator);
   };
 
   const defaultStateMutator: TMutateState = resolverConstruct(setStateWrapper);
-  const pipeStateMutator: TMutateState = resolverConstruct(pipeSetStateWrapper);
+  const pipeStateMutator = resolverConstruct(pipeSetStateWrapper);
 
   const mutators = {
     nullify: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("nullify", path, PF.setTo(path, null, state))
+        callback('nullify', path, set(lensPath(path), null, state))
       ),
     concat: (callback: TMutateState) =>
       toPath((path: string[]) => (list: any[]) =>
         callback(
-          "concat",
+          'concat',
           path,
-          PF.overTo(path, PF.flip(PF.concat)(list), state)
+          over(lensPath(path), flip(concat)(list), state)
         )
       ),
     extend: (callback: TMutateState) =>
       toPath((path: string[]) => (object: object) =>
-        callback("extend", path, PF.overTo(path, PF.merge(object), state))
+        callback('extend', path, over(lensPath(path), merge(object), state))
       ),
     toggle: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("toggle", path, PF.overTo(path, PF.not, state))
+        callback('toggle', path, over(lensPath(path), not, state))
       ),
     set: (callback: TMutateState) =>
       toPath((path: string[]) => (value: any) =>
-        callback("set", path, PF.setTo(path, value, state))
+        callback('set', path, set(lensPath(path), value, state))
       ),
     inc: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("inc", path, PF.overTo(path, PF.inc, state))
+        callback('inc', path, over(lensPath(path), inc, state))
       ),
     dec: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("dec", path, PF.overTo(path, PF.dec, state))
-      )
+        callback('dec', path, over(lensPath(path), dec, state))
+      ),
   };
 
-  interface PipeListItem {
+  interface IPipeListItem {
     type: string;
     path: string[];
-    result: State;
+    result: IState;
   }
-  let pipeList: PipeListItem[] = [];
+  let pipeList: IPipeListItem[] = [];
 
   const actions: IActionsAndPipe = {
     nullify: mutators.nullify(defaultStateMutator),
@@ -203,7 +233,7 @@ export const createStore = (
       dec: mutators.dec(piper),
       run: () => {
         pipeList.reduce(
-          (accumulator, currentValue: PipeListItem) => {
+          (accumulator, currentValue: IPipeListItem) => {
             return pipeStateMutator(
               currentValue.type,
               currentValue.path,
@@ -216,11 +246,11 @@ export const createStore = (
         providerValue.setState(state);
         pipeList = [];
         return state;
-      }
-    }
+      },
+    },
   };
 
-  function piper(type: string, path: string[], result: State) {
+  function piper(type: string, path: string[], result: IState): Ipipe {
     pipeList.push({ type, path, result });
     return actions.pipe;
   }
@@ -231,6 +261,6 @@ export const createStore = (
   return {
     Provider,
     connect,
-    ...actions
+    ...actions,
   };
 };

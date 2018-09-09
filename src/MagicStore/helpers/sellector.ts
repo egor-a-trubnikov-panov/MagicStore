@@ -1,5 +1,5 @@
 import { getPathFromTemplateString } from "./templateStringParser";
-import { PF } from "../../pureFunctions";
+import {path as Rpath, pathOr} from 'ramda'
 
 export interface ISellector {
   or(
@@ -16,14 +16,14 @@ export function sel(state: object): ISellector {
     ...args: any[]
   ) => {
     const path: string[] = getPathFromTemplateString(templateData, ...args);
-    return PF.path(path, state);
+    return Rpath(path, state);
   };
 
   selector.or = (templateData: TemplateStringsArray, ...args: any[]) => (
     defaultValue: any
   ) => {
     const path: string[] = getPathFromTemplateString(templateData, ...args);
-    return PF.pathOr(defaultValue, path, state);
+    return pathOr(defaultValue, path, state);
   };
 
   return selector;

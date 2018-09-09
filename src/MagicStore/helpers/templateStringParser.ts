@@ -4,7 +4,7 @@ export const getPathFromTemplateString = (
 ): string[] => {
   let s = templateData[0];
   for (let i = 1, j = 0; j < args.length; i++, j++) {
-    let arg = String(args[j]);
+    const arg = String(args[j]);
 
     // Escape special characters in the substitution.
     s += arg;

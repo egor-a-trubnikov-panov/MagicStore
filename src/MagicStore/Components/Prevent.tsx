@@ -1,11 +1,11 @@
 import * as React from "react";
 
-type Props = {
+interface IProps {
   renderComponent: ({}) => React.ReactNode;
 };
 
-export class Prevent extends React.PureComponent<Props> {
-  render() {
+export class Prevent extends React.PureComponent<IProps> {
+  public render() {
     const { renderComponent, ...rest } = this.props;
     return renderComponent(rest);
   }

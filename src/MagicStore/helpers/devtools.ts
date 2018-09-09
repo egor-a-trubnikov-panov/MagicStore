@@ -1,8 +1,8 @@
-import { Actions, State } from "../index";
+import { Actions, IState } from "../index";
 
 type InitializedMiddlewares = (type: Actions, payload: any, state: any) => void;
 
-type Devtools = (initialState: State, self: any) => InitializedMiddlewares;
+type Devtools = (initialState: IState, self: any) => InitializedMiddlewares;
 
 let id = 0;
 
