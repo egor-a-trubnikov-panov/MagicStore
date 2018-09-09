@@ -94,11 +94,11 @@ export const createStore = (
   const setStateWrapper: TMutateState = (type, path, result) => {
     if (!providerValue) {
       console.error("<Provider /> is not initialized yet");
-      return;
+      return state;
     }
 
     state = { ...state, ...result };
-    const newState = { ...state, ...result };
+    const newState = { ...state };
 
     const runMidleware = (middleware: any) =>
       middleware(type, { result, path }, newState);
@@ -109,17 +109,20 @@ export const createStore = (
     return state;
   };
 
-  const pipeSetStateWrapper: TMutateState = (type, path, result) => {
+  const pipeSetStateWrapper = (type, path, result, accumulator) => {
     if (!providerValue) {
       console.error("<Provider /> is not initialized yet");
-      return;
+      return state;
     }
 
-    state = { ...state, ...result };
-    const newState = { ...state, ...result };
+    state = { ...state, ...accumulator, ...result };
+    const newState = { ...state };
 
     const runMidleware = (middleware: any) =>
       middleware(type, { result, path }, newState);
+
+    providerValue.initializedMiddlewares.forEach(runMidleware);
+    return newState;
   };
 
   function toPath(mutator: StoreMutator) {
@@ -148,30 +151,30 @@ export const createStore = (
     concat: (callback: TMutateState) =>
       toPath((path: string[]) => (list: any[]) =>
         callback(
-          "nullify",
+          "concat",
           path,
           PF.overTo(path, PF.flip(PF.concat)(list), state)
         )
       ),
     extend: (callback: TMutateState) =>
       toPath((path: string[]) => (object: object) =>
-        callback("nullify", path, PF.overTo(path, PF.merge(object), state))
+        callback("extend", path, PF.overTo(path, PF.merge(object), state))
       ),
     toggle: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("nullify", path, PF.overTo(path, PF.not, state))
+        callback("toggle", path, PF.overTo(path, PF.not, state))
       ),
     set: (callback: TMutateState) =>
       toPath((path: string[]) => (value: any) =>
-        callback("nullify", path, PF.setTo(path, value, state))
+        callback("set", path, PF.setTo(path, value, state))
       ),
     inc: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("nullify", path, PF.overTo(path, PF.inc, state))
+        callback("inc", path, PF.overTo(path, PF.inc, state))
       ),
     dec: (callback: TMutateState) =>
       toPath((path: string[]) =>
-        callback("nullify", path, PF.overTo(path, PF.dec, state))
+        callback("dec", path, PF.overTo(path, PF.dec, state))
       )
   };
 
@@ -199,13 +202,18 @@ export const createStore = (
       inc: mutators.inc(piper),
       dec: mutators.dec(piper),
       run: () => {
-        pipeList.forEach((item: PipeListItem) => {
-          pipeStateMutator(item.type, item.path, item.result);
-        });
-
-        providerValue.setState(state, () => {
-          providerValue.initializedMiddlewares.forEach(runMidleware);
-        });
+        pipeList.reduce(
+          (accumulator, currentValue: PipeListItem) => {
+            return pipeStateMutator(
+              currentValue.type,
+              currentValue.path,
+              currentValue.result,
+              accumulator
+            );
+          },
+          { ...state }
+        );
+        providerValue.setState(state);
         pipeList = [];
         return state;
       }
