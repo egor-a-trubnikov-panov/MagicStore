@@ -1,8 +1,14 @@
-import { createStore } from "./MagicStore/index";
+import { createStore } from './MagicStore/index';
 
-const store = createStore({
+export interface IState {
+  count: number;
+  other: number;
+  [key: string]: any;
+}
+
+const store = createStore<IState>({
   count: 0,
-  other: 5
+  other: 5,
 });
 
-export const { Provider, connect, pipe } = store;
+export const { Provider, connect, ...actions } = store;

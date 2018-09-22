@@ -6,13 +6,9 @@ import { devtoolsCreator } from './helpers/devtools';
 import { getPathFromTemplateString } from './helpers/templateStringParser';
 import { set, over, lensPath, flip, concat, merge, not, inc, dec } from 'ramda';
 
-export interface IState {
-  [key: string]: any;
-}
-
 type TSetState = (
   state: (prevState: any, props: any) => any,
-  callback?: () => void
+  piper?: () => void
 ) => void;
 
 interface IProviderValue {
@@ -29,49 +25,30 @@ export type Actions =
   | 'inc'
   | 'dec';
 
-export interface IActions {
-  nullify: (path: TemplateStringsArray, ...args: any[]) => IState;
-  concat: (
-    path: TemplateStringsArray,
-    ...args: any[]
-  ) => (list: any[]) => IState;
-  extend: (
-    path: TemplateStringsArray,
-    ...args: any[]
-  ) => (object: object) => IState;
-  toggle: (path: TemplateStringsArray, ...args: any[]) => IState;
-  set: (path: TemplateStringsArray, ...args: any[]) => (value: any) => IState;
-  inc: (path: TemplateStringsArray, ...args: any[]) => IState;
-  dec: (path: TemplateStringsArray, ...args: any[]) => IState;
-}
-
-export interface IPipeActions {
-  nullify: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
-  concat: (
-    path: TemplateStringsArray,
-    ...args: any[]
-  ) => (list: any[]) => Ipipe;
-  extend: (
-    path: TemplateStringsArray,
-    ...args: any[]
-  ) => (object: object) => Ipipe;
-  toggle: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
-  set: (path: TemplateStringsArray, ...args: any[]) => (value: any) => Ipipe;
-  inc: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
-  dec: (path: TemplateStringsArray, ...args: any[]) => Ipipe;
-}
-
-interface Ipipe extends IPipeActions {
+interface IPipe<IState> extends IActions<IState> {
   run: () => IState;
 }
 
-export interface IActionsAndPipe extends IActions {
-  pipe: Ipipe;
+export interface IActions<IState> {
+  nullify: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
+  concat: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => (list: any[]) => IPipe<IState>;
+  extend: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => (object: object) => IPipe<IState>;
+  toggle: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
+  set: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => (value: any) => IPipe<IState>;
+  inc: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
+  dec: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
 }
 
 type StoreMutator = (path: string[]) => any;
-
-type TMutateState = (type: string, path: string[], result: IState) => any;
 
 const defaultMiddlewares =
   process.env.NODE_ENV === 'development' &&
@@ -81,15 +58,15 @@ const defaultMiddlewares =
     ? [devtoolsCreator]
     : [];
 
-interface ICreatedFuncs extends IActionsAndPipe {
+interface ICreatedFuncs<IState> extends IActions<IState> {
   Provider: React.ComponentType<any>;
-  connect: Connect;
+  connect: Connect<IState>;
 }
 
-export const createStore = (
-  initialState: any,
+export const createStore = <IState>(
+  initialState: IState,
   middlewares = []
-): ICreatedFuncs => {
+): ICreatedFuncs<IState> => {
   // @ts-ignore
   const context = React.createContext();
 
@@ -102,8 +79,8 @@ export const createStore = (
 
     const initializedMiddlewares = midlewaresList.map(setMidleware);
 
-    const setState: TSetState = (newState, callback) =>
-      self.setState(newState, callback);
+    const setState: TSetState = (newState, piperFn) =>
+      self.setState(newState, piperFn);
 
     providerValue = {
       setState,
@@ -113,28 +90,10 @@ export const createStore = (
 
   let state = initialState;
 
-  const setStateWrapper: TMutateState = (type, path, result) => {
-    if (!providerValue) {
-      console.error('<Provider /> is not initialized yet');
-      return state;
-    }
-
-    state = { ...state, ...result };
-    const newState = { ...state };
-
-    const runMidleware = (middleware: any) =>
-      middleware(type, { result, path }, newState);
-
-    providerValue.setState(state, () => {
-      providerValue.initializedMiddlewares.forEach(runMidleware);
-    });
-    return state;
-  };
-
-  const pipeSetStateWrapper = (
+  const setStateWrapper = (
     type: string,
     path: string[],
-    result: IState,
+    value: any,
     accumulator: IState
   ): IState => {
     if (!providerValue) {
@@ -142,11 +101,10 @@ export const createStore = (
       return state;
     }
 
-    state = { ...state, ...accumulator, ...result };
-    const newState = { ...state };
+    const newState = mutators[type](accumulator, path, value);
 
     const runMidleware = (middleware: any) =>
-      middleware(type, { result, path }, newState);
+      middleware(`${type}: ${path.join('.')}`, { value, path }, newState);
 
     providerValue.initializedMiddlewares.forEach(runMidleware);
     return newState;
@@ -157,106 +115,85 @@ export const createStore = (
       mutator(getPathFromTemplateString(templateData, ...args));
   }
 
-  const resolverConstruct = (stateMutator: any) => (
-    type: string,
-    path: string[],
-    result: IState,
-    accumulator?: IState
-  ) => {
-    return result.then
-      ? result.then((resolvedResult: any) =>
-          stateMutator(type, path, resolvedResult, accumulator)
-        )
-      : stateMutator(type, path, result, accumulator);
-  };
-
-  const defaultStateMutator: TMutateState = resolverConstruct(setStateWrapper);
-  const pipeStateMutator = resolverConstruct(pipeSetStateWrapper);
+  enum MutatorType {
+    Nullify = 'nullify',
+    Concat = 'concat',
+    Extend = 'extend',
+    Toggle = 'toggle',
+    Set = 'set',
+    Inc = 'inc',
+    Dec = 'dec',
+  }
 
   const mutators = {
-    nullify: (callback: TMutateState) =>
-      toPath((path: string[]) =>
-        callback('nullify', path, set(lensPath(path), null, state))
-      ),
-    concat: (callback: TMutateState) =>
-      toPath((path: string[]) => (list: any[]) =>
-        callback(
-          'concat',
-          path,
-          over(lensPath(path), flip(concat)(list), state)
-        )
-      ),
-    extend: (callback: TMutateState) =>
-      toPath((path: string[]) => (object: object) =>
-        callback('extend', path, over(lensPath(path), merge(object), state))
-      ),
-    toggle: (callback: TMutateState) =>
-      toPath((path: string[]) =>
-        callback('toggle', path, over(lensPath(path), not, state))
-      ),
-    set: (callback: TMutateState) =>
-      toPath((path: string[]) => (value: any) =>
-        callback('set', path, set(lensPath(path), value, state))
-      ),
-    inc: (callback: TMutateState) =>
-      toPath((path: string[]) =>
-        callback('inc', path, over(lensPath(path), inc, state))
-      ),
-    dec: (callback: TMutateState) =>
-      toPath((path: string[]) =>
-        callback('dec', path, over(lensPath(path), dec, state))
-      ),
+    nullify: (accumulator: IState, path: string[]) =>
+      set(lensPath(path), null, accumulator),
+    concat: (accumulator: IState, path: string[], list: any[]) =>
+      over(lensPath(path), flip(concat)(list), accumulator),
+    extend: (accumulator: IState, path: string[], object: object) =>
+      over(lensPath(path), merge(object), accumulator),
+    toggle: (accumulator: IState, path: string[]) =>
+      over(lensPath(path), not, accumulator),
+    set: (accumulator: IState, path: string[], value: any) =>
+      set(lensPath(path), value, accumulator),
+    inc: (accumulator: IState, path: string[]) =>
+      over(lensPath(path), inc, accumulator),
+    dec: (accumulator: IState, path: string[]) =>
+      over(lensPath(path), dec, accumulator),
   };
 
   interface IPipeListItem {
-    type: string;
+    type: MutatorType;
     path: string[];
-    result: IState;
+    value: any;
   }
+
   let pipeList: IPipeListItem[] = [];
 
-  const actions: IActionsAndPipe = {
-    nullify: mutators.nullify(defaultStateMutator),
-    concat: mutators.concat(defaultStateMutator),
-    extend: mutators.extend(defaultStateMutator),
-    toggle: mutators.toggle(defaultStateMutator),
-    set: mutators.set(defaultStateMutator),
-    inc: mutators.inc(defaultStateMutator),
-    dec: mutators.dec(defaultStateMutator),
-    pipe: {
-      nullify: mutators.nullify(piper),
-      concat: mutators.concat(piper),
-      extend: mutators.extend(piper),
-      toggle: mutators.toggle(piper),
-      set: mutators.set(piper),
-      inc: mutators.inc(piper),
-      dec: mutators.dec(piper),
-      run: () => {
-        pipeList.reduce(
-          (accumulator, currentValue: IPipeListItem) => {
-            return pipeStateMutator(
-              currentValue.type,
-              currentValue.path,
-              currentValue.result,
-              accumulator
-            );
-          },
-          { ...state }
-        );
-        providerValue.setState(state);
-        pipeList = [];
-        return state;
-      },
-    },
+  const actions: IActions<IState> = {
+    nullify: toPath((path: string[]) => piper(MutatorType.Nullify, path, null)),
+    concat: toPath((path: string[]) => (list: any[]) =>
+      piper(MutatorType.Concat, path, list)
+    ),
+    extend: toPath((path: string[]) => (object: object) =>
+      piper(MutatorType.Extend, path, object)
+    ),
+    toggle: toPath((path: string[]) => piper(MutatorType.Toggle, path)),
+    set: toPath((path: string[]) => (value: any) =>
+      piper(MutatorType.Set, path, value)
+    ),
+    inc: toPath((path: string[]) => piper(MutatorType.Inc, path)),
+    dec: toPath((path: string[]) => piper(MutatorType.Dec, path)),
   };
 
-  function piper(type: string, path: string[], result: IState): Ipipe {
-    pipeList.push({ type, path, result });
-    return actions.pipe;
+  const run = (): IState => {
+    const newState = pipeList.reduce(
+      (accumulator, currentValue: IPipeListItem) =>
+        setStateWrapper(
+          currentValue.type,
+          currentValue.path,
+          currentValue.value,
+          accumulator
+        ),
+      { ...Object(state) }
+    );
+    state = newState;
+    providerValue.setState(newState);
+    pipeList = [];
+    return state;
+  };
+
+  function piper(
+    type: MutatorType,
+    path: string[],
+    value?: any
+  ): IPipe<IState> {
+    pipeList.push({ type, path, value });
+    return { ...actions, run };
   }
 
   const Provider = createProvider(setProvider, context.Provider, initialState);
-  const connect = createConnect(context.Consumer);
+  const connect = createConnect<IState>(context.Consumer);
 
   return {
     Provider,

@@ -1,23 +1,18 @@
 import * as React from 'react';
-import { IState } from '../index';
 
 interface IProps {
   children: React.ReactNode;
   initialState: {};
 }
 
-type CreateProvider = (
-  setProvider: (prop: any) => any,
-  Provider: React.ComponentType<any>,
-  initialState: IState
-) => React.ComponentType<any>;
+type AnyFunc = (prop: any) => any;
 
-export const createProvider: CreateProvider = (
-  setProvider,
-  Provider,
-  initialState
-) =>
-  class EnhancedProvider extends React.PureComponent<IProps, IState> {
+export const createProvider = (
+  setProvider: AnyFunc,
+  Provider: React.ComponentType<any>,
+  initialState: any
+): React.ComponentType<any> =>
+  class EnhancedProvider extends React.PureComponent<IProps, any> {
     constructor(props: IProps) {
       super(props);
       this.state = props.initialState || initialState;
