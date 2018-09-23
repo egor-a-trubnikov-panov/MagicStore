@@ -4,7 +4,24 @@ import { createProvider } from './Components/Provider';
 import { Connect, createConnect } from './helpers/connect';
 import { devtoolsCreator } from './helpers/devtools';
 import { getPathFromTemplateString } from './helpers/templateStringParser';
-import { set, over, lensPath, flip, concat, merge, not, inc, dec } from 'ramda';
+import {
+  set,
+  over,
+  lensPath,
+  flip,
+  concat,
+  merge,
+  not,
+  inc,
+  dec,
+  omit,
+  init,
+  last,
+  remove,
+  is,
+  ifElse,
+} from 'ramda';
+import { ISellector, sel } from './helpers/sellector';
 
 type TSetState = (
   state: (prevState: any, props: any) => any,
@@ -20,32 +37,37 @@ export type Actions =
   | 'nullify'
   | 'concat'
   | 'extend'
+  | 'remove'
   | 'toggle'
   | 'set'
   | 'inc'
   | 'dec';
 
-interface IPipe<IState> extends IActions<IState> {
+export interface IActionsChain<IState> extends IActions<IState> {
   run: () => IState;
 }
 
 export interface IActions<IState> {
-  nullify: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
+  nullify: (
+    path: TemplateStringsArray,
+    ...args: any[]
+  ) => IActionsChain<IState>;
   concat: (
     path: TemplateStringsArray,
     ...args: any[]
-  ) => (list: any[]) => IPipe<IState>;
+  ) => (list: any[]) => IActionsChain<IState>;
   extend: (
     path: TemplateStringsArray,
     ...args: any[]
-  ) => (object: object) => IPipe<IState>;
-  toggle: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
+  ) => (object: object) => IActionsChain<IState>;
+  remove: (path: TemplateStringsArray, ...args: any[]) => IActionsChain<IState>;
+  toggle: (path: TemplateStringsArray, ...args: any[]) => IActionsChain<IState>;
   set: (
     path: TemplateStringsArray,
     ...args: any[]
-  ) => (value: any) => IPipe<IState>;
-  inc: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
-  dec: (path: TemplateStringsArray, ...args: any[]) => IPipe<IState>;
+  ) => (value: any) => IActionsChain<IState>;
+  inc: (path: TemplateStringsArray, ...args: any[]) => IActionsChain<IState>;
+  dec: (path: TemplateStringsArray, ...args: any[]) => IActionsChain<IState>;
 }
 
 type StoreMutator = (path: string[]) => any;
@@ -61,6 +83,7 @@ const defaultMiddlewares =
 interface ICreatedFuncs<IState> extends IActions<IState> {
   Provider: React.ComponentType<any>;
   connect: Connect<IState>;
+  select: ISellector;
 }
 
 export const createStore = <IState>(
@@ -119,6 +142,7 @@ export const createStore = <IState>(
     Nullify = 'nullify',
     Concat = 'concat',
     Extend = 'extend',
+    Remove = 'remove',
     Toggle = 'toggle',
     Set = 'set',
     Inc = 'inc',
@@ -132,6 +156,16 @@ export const createStore = <IState>(
       over(lensPath(path), flip(concat)(list), accumulator),
     extend: (accumulator: IState, path: string[], object: object) =>
       over(lensPath(path), merge(object), accumulator),
+    remove: (accumulator: IState, path: string[]) =>
+      over(
+        lensPath(init(path)),
+        ifElse(
+          is(Array),
+          remove(Number(last(path)), 1),
+          omit([last(path) || ''])
+        ),
+        accumulator
+      ),
     toggle: (accumulator: IState, path: string[]) =>
       over(lensPath(path), not, accumulator),
     set: (accumulator: IState, path: string[], value: any) =>
@@ -158,6 +192,7 @@ export const createStore = <IState>(
     extend: toPath((path: string[]) => (object: object) =>
       piper(MutatorType.Extend, path, object)
     ),
+    remove: toPath((path: string[]) => piper(MutatorType.Remove, path)),
     toggle: toPath((path: string[]) => piper(MutatorType.Toggle, path)),
     set: toPath((path: string[]) => (value: any) =>
       piper(MutatorType.Set, path, value)
@@ -187,7 +222,7 @@ export const createStore = <IState>(
     type: MutatorType,
     path: string[],
     value?: any
-  ): IPipe<IState> {
+  ): IActionsChain<IState> {
     pipeList.push({ type, path, value });
     return { ...actions, run };
   }
@@ -198,6 +233,7 @@ export const createStore = <IState>(
   return {
     Provider,
     connect,
+    select: sel(state),
     ...actions,
   };
 };

@@ -1,14 +1,25 @@
 import { createStore } from './MagicStore/index';
+export interface ITodo {
+  title: string;
+  completed: boolean;
+}
+
+export interface ITodoList {
+ [uid: string]: ITodo
+}
 
 export interface IState {
-  count: number;
-  other: number;
-  [key: string]: any;
+  newTodoTitle: string;
+  todos: ITodoList;
+  filter: string;
+  editingUid: string;
 }
 
 const store = createStore<IState>({
-  count: 0,
-  other: 5,
+  newTodoTitle: '',
+  todos: {},
+  filter: 'all',
+  editingUid: '',
 });
 
 export const { Provider, connect, ...actions } = store;

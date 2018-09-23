@@ -2,11 +2,11 @@ import { getPathFromTemplateString } from './templateStringParser';
 import { path as Rpath, pathOr } from 'ramda';
 
 export interface ISellector {
-  or(
+  or<T>(
     templateData: TemplateStringsArray,
     ...args: any[]
-  ): (defaultValue: any) => any;
-  (templateData: TemplateStringsArray, ...args: any[]): any;
+  ): (defaultValue: T) => T;
+  <T>(templateData: TemplateStringsArray, ...args: any[]): T;
 }
 
 export function sel(state: any): ISellector {
