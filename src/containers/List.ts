@@ -1,6 +1,6 @@
 import { connect, actions, IState, ITodo } from '../store';
 import { List } from '../components/List';
-import { keys } from 'ramda';
+import { keys, filter } from 'ramda';
 import { IActionsChain } from '../MagicStore';
 
 export const ConList = connect(selState => ({
@@ -8,7 +8,18 @@ export const ConList = connect(selState => ({
   isAllChecked: keys(selState`todos`).every(
     (uid: string) => selState`todos.${uid}.completed`
   ),
-  todosUids: keys(selState`todos`),
+  todosUids: keys(
+    filter((todo: ITodo) => {
+      switch (selState`filter`) {
+        case 'completed':
+          return todo.completed;
+        case 'active':
+          return !todo.completed;
+        default:
+          return true;
+      }
+    }, selState`todos`)
+  ),
   toggleAllChanged: () => {
     const uidList: string[] = keys<ITodo>(selState`todos`);
 
