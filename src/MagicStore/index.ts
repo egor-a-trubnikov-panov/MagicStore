@@ -21,11 +21,12 @@ import {
   is,
   ifElse,
 } from 'ramda';
-import { ISellector, sel } from './helpers/sellector';
+import { ISellector, selectorCreator } from './helpers/ISellector';
+import { globalStateKey } from './helpers/constants';
 
 type TSetState = (
   state: (prevState: any, props: any) => any,
-  piper?: () => void
+  piper?: () => void,
 ) => void;
 
 interface IProviderValue {
@@ -48,10 +49,6 @@ export interface IActionsChain<IState> extends IActions<IState> {
 }
 
 export interface IActions<IState> {
-  nullify: (
-    path: TemplateStringsArray,
-    ...args: any[]
-  ) => IActionsChain<IState>;
   concat: (
     path: TemplateStringsArray,
     ...args: any[]
@@ -82,18 +79,21 @@ const defaultMiddlewares =
 
 interface ICreatedFuncs<IState> extends IActions<IState> {
   Provider: React.ComponentType<any>;
-  connect: Connect<IState>;
+  connect: Connect;
   select: ISellector;
 }
 
 export const createStore = <IState>(
   initialState: IState,
-  middlewares = []
+  middlewares = [],
 ): ICreatedFuncs<IState> => {
   // @ts-ignore
   const context = React.createContext();
 
   let providerValue: IProviderValue;
+
+  const stateForSelect = new Map();
+  stateForSelect.set(globalStateKey, initialState);
 
   const setProvider = (self: React.PureComponent) => {
     const midlewaresList = [...middlewares, ...defaultMiddlewares];
@@ -102,8 +102,10 @@ export const createStore = <IState>(
 
     const initializedMiddlewares = midlewaresList.map(setMidleware);
 
-    const setState: TSetState = (newState, piperFn) =>
-      self.setState(newState, piperFn);
+    const setState: TSetState = (newState) => {
+      stateForSelect.set(globalStateKey, self.state);
+      self.setState(newState);
+    };
 
     providerValue = {
       setState,
@@ -117,7 +119,7 @@ export const createStore = <IState>(
     type: string,
     path: string[],
     value: any,
-    accumulator: IState
+    accumulator: IState,
   ): IState => {
     if (!providerValue) {
       console.error('<Provider /> is not initialized yet');
@@ -139,7 +141,6 @@ export const createStore = <IState>(
   }
 
   enum MutatorType {
-    Nullify = 'nullify',
     Concat = 'concat',
     Extend = 'extend',
     Remove = 'remove',
@@ -150,8 +151,6 @@ export const createStore = <IState>(
   }
 
   const mutators = {
-    nullify: (accumulator: IState, path: string[]) =>
-      set(lensPath(path), null, accumulator),
     concat: (accumulator: IState, path: string[], list: any[]) =>
       over(lensPath(path), flip(concat)(list), accumulator),
     extend: (accumulator: IState, path: string[], object: object) =>
@@ -162,9 +161,9 @@ export const createStore = <IState>(
         ifElse(
           is(Array),
           remove(Number(last(path)), 1),
-          omit([last(path) || ''])
+          omit([last(path) || '']),
         ),
-        accumulator
+        accumulator,
       ),
     toggle: (accumulator: IState, path: string[]) =>
       over(lensPath(path), not, accumulator),
@@ -185,17 +184,16 @@ export const createStore = <IState>(
   let pipeList: IPipeListItem[] = [];
 
   const actions: IActions<IState> = {
-    nullify: toPath((path: string[]) => piper(MutatorType.Nullify, path, null)),
     concat: toPath((path: string[]) => (list: any[]) =>
-      piper(MutatorType.Concat, path, list)
+      piper(MutatorType.Concat, path, list),
     ),
     extend: toPath((path: string[]) => (object: object) =>
-      piper(MutatorType.Extend, path, object)
+      piper(MutatorType.Extend, path, object),
     ),
     remove: toPath((path: string[]) => piper(MutatorType.Remove, path)),
     toggle: toPath((path: string[]) => piper(MutatorType.Toggle, path)),
     set: toPath((path: string[]) => (value: any) =>
-      piper(MutatorType.Set, path, value)
+      piper(MutatorType.Set, path, value),
     ),
     inc: toPath((path: string[]) => piper(MutatorType.Inc, path)),
     dec: toPath((path: string[]) => piper(MutatorType.Dec, path)),
@@ -208,10 +206,11 @@ export const createStore = <IState>(
           currentValue.type,
           currentValue.path,
           currentValue.value,
-          accumulator
+          accumulator,
         ),
-      { ...Object(state) }
+      { ...Object(state) },
     );
+
     state = newState;
     providerValue.setState(newState);
     pipeList = [];
@@ -221,19 +220,19 @@ export const createStore = <IState>(
   function piper(
     type: MutatorType,
     path: string[],
-    value?: any
+    value?: any,
   ): IActionsChain<IState> {
     pipeList.push({ type, path, value });
     return { ...actions, run };
   }
 
   const Provider = createProvider(setProvider, context.Provider, initialState);
-  const connect = createConnect<IState>(context.Consumer);
+  const connect = createConnect(context.Consumer);
 
   return {
     Provider,
     connect,
-    select: sel(state),
+    select: selectorCreator(stateForSelect),
     ...actions,
   };
 };

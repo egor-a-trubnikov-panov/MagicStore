@@ -16,7 +16,7 @@ interface ITodo {
   removeTodoClicked: (uid: string) => void;
 }
 
-export const Todo: React.SFC<ITodo> = ({
+export const Todo: React.FunctionComponent<ITodo> = ({
   uid,
   isEditing,
   todo,

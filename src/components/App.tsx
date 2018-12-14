@@ -8,7 +8,7 @@ interface IApp {
   counts: ICounts;
 }
 
-export const App: React.SFC<IApp> = ({ counts }) => (
+export const App: React.FunctionComponent<IApp> = ({ counts }) => (
   <div id="todoapp-wrapper">
     <section className="todoapp">
       <header className="header">

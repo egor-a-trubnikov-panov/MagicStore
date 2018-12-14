@@ -8,7 +8,7 @@ interface IList {
   toggleAllChanged: () => {};
 }
 
-export const List: React.SFC<IList> = ({
+export const List: React.FunctionComponent<IList> = ({
   editingUid,
   isAllChecked,
   todosUids,

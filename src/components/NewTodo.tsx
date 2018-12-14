@@ -6,25 +6,26 @@ interface INewTodo {
   submitted: () => void;
 }
 
-export const NewTodo: React.SFC<INewTodo> = ({
-  title,
-  titleChanged,
-  submitted,
-}) => {
-  const handleSubmit = e => {
+export class NewTodo extends React.PureComponent<INewTodo> {
+  public render() {
+    const { title } = this.props;
+    return (
+      <form id="todo-form" onSubmit={this.handleSubmit}>
+        <input
+          className="new-todo"
+          autoComplete="off"
+          placeholder="What needs to be done?"
+          value={title || ''}
+          onChange={this.handleChange}
+        />
+      </form>
+    );
+  }
+
+  private handleSubmit = e => {
     e.preventDefault();
-    submitted();
+    this.props.submitted();
   };
-  const handleChange = e => titleChanged(e.target.value);
-  return (
-    <form id="todo-form" onSubmit={handleSubmit}>
-      <input
-        className="new-todo"
-        autoComplete="off"
-        placeholder="What needs to be done?"
-        value={title || ''}
-        onChange={handleChange}
-      />
-    </form>
-  );
-};
+
+  private handleChange = e => this.props.titleChanged(e.target.value);
+}

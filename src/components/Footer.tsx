@@ -11,7 +11,7 @@ interface IFooter {
   clearCompletedClicked: () => void;
 }
 
-export const Footer: React.SFC<IFooter> = ({
+export const Footer: React.FunctionComponent<IFooter> = ({
   filter,
   counts,
   filterClicked,

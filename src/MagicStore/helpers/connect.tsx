@@ -1,37 +1,25 @@
 import * as React from 'react';
-import { Prevent } from '../Components/Prevent';
-import { sel, ISellector } from './sellector';
 
-interface IMapPropsResult<IState> {
+interface IMapPropsResult {
   [key: string]: any;
 }
 
-type MapStateAndPropsToProps<IState> = (
-  selectorFromState: ISellector,
-  selectorFromProps: ISellector
-) => IMapPropsResult<IState>;
+type Selectors = (props: any) => IMapPropsResult;
 
-export type Connect<IState> = (
-  mapStateAndPropsToProps: MapStateAndPropsToProps<IState>
-) => (WrappedComponent: React.ComponentType<any>) => React.ComponentType<any>;
+export type Connect = (mapProps: Selectors) => (WrappedComponent: React.ComponentType<any>) => React.ComponentType<any>;
 
-type TConsumer<IState> = React.ComponentType<{
-  children: (state: IState | void) => React.ReactNode;
-}>;
-
-export function createConnect<IState>(Consumer: TConsumer<IState>) {
+export function createConnect(Consumer) {
   return (
-    mapStateAndPropsToProps: MapStateAndPropsToProps<IState>
+    mapProps: Selectors,
   ) => WrappedComponent => {
-    const renderComponent: React.SFC = props => <WrappedComponent {...props} />;
-    const ConnectedComponent: React.SFC = props => (
+    const RenderComponent: React.FunctionComponent = props => <WrappedComponent {...props} />;
+    const ConnectedComponent: React.FunctionComponent = props => (
       <Consumer>
-        {(state: IState) => {
+        {() => {
           return (
-            <Prevent
-              renderComponent={renderComponent}
+            <RenderComponent
               {...props}
-              {...mapStateAndPropsToProps(sel(state), sel(props))}
+              {...mapProps(props)}
             />
           );
         }}
@@ -39,8 +27,8 @@ export function createConnect<IState>(Consumer: TConsumer<IState>) {
     );
 
     ConnectedComponent.displayName = `Connect(${WrappedComponent.displayName ||
-      WrappedComponent.name ||
-      'Unknown'})`;
+    WrappedComponent.name ||
+    'Unknown'})`;
 
     return ConnectedComponent;
   };

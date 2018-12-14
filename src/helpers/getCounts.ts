@@ -1,10 +1,10 @@
-import { filter, keys } from 'ramda';
-import { ITodo, ITodoList } from '../store';
+import { keys } from 'ramda';
+import { ITodo, ITodoList, select } from '../store';
 import { ICounts } from '../interfaces';
 
 export const getCounts = (todos: ITodoList): ICounts => ({
-  visible: keys<ITodoList>(todos).length,
-  total: keys<ITodoList>(todos).length,
-  completed: keys(filter((todo: ITodo) => todo.completed, todos)).length,
-  remaining: keys(filter((todo: ITodo) => !todo.completed, todos)).length,
+  visible: keys(todos).length,
+  total: keys(todos).length,
+  completed: select<ITodo[]>`todos(completed = true)`.length,
+  remaining: select<ITodo[]>`todos(completed = false)`.length,
 });

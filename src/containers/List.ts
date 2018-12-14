@@ -1,16 +1,16 @@
-import { connect, actions, IState, ITodo } from '../store';
+import { connect, actions, IState, ITodo, select } from '../store';
 import { List } from '../components/List';
 import { keys, filter } from 'ramda';
 import { IActionsChain } from '../MagicStore';
 
-export const ConList = connect(selState => ({
-  editingUid: selState`editingUid`,
-  isAllChecked: keys(selState`todos`).every(
-    (uid: string) => selState`todos.${uid}.completed`
+export const ConList = connect(props => ({
+  editingUid: select`editingUid`,
+  isAllChecked: keys(select`todos`).every(
+    (uid: string) => select`todos.${uid}.completed`,
   ),
   todosUids: keys(
     filter((todo: ITodo) => {
-      switch (selState`filter`) {
+      switch (select`filter`) {
         case 'completed':
           return todo.completed;
         case 'active':
@@ -18,10 +18,10 @@ export const ConList = connect(selState => ({
         default:
           return true;
       }
-    }, selState`todos`)
+    }, select`todos`),
   ),
   toggleAllChanged: () => {
-    const uidList: string[] = keys<ITodo>(selState`todos`);
+    const uidList: string[] = keys<ITodo>(select`todos`);
 
     const setCompleted = (act: any, uid: string): IActionsChain<IState> => {
       const { set } = act;

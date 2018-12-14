@@ -22,4 +22,4 @@ const store = createStore<IState>({
   editingUid: '',
 });
 
-export const { Provider, connect, ...actions } = store;
+export const { Provider, connect, select, ...actions } = store;
